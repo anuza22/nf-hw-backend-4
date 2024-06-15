@@ -18,8 +18,9 @@ export const authMiddleware = (
 
   if (!payload) {
     return res.status(401).json({ message: 'Invalid or expired token' })
-  }
-
-  ;(req as any).user = payload
+  };
+  
+  (req as any).user = payload.username;
+  (req as any)._id = payload.id;
   next()
 }

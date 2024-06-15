@@ -1,10 +1,15 @@
-import { CreateUserDto } from './dtos/CreateUser.dto'
+import { CreateUserDto, UpdateUserDto } from './dtos/CreateUser.dto'
 import { IUser } from './models/User'
 import UserModel from './models/User'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import dotenv from 'dotenv'
+import { ISinger } from './models/Singers'
+import SingerModel from './models/Singers'
 import RefreshTokenModel from './models/RefreshToken'
+import { User } from './types/response'
+import { IFavorites } from './models/Favorites'
+import FavoriteModel from './models/Favorites'
 
 dotenv.config()
 
@@ -13,12 +18,11 @@ class AuthService {
   private readonly jwtRefreshSecret = process.env.JWT_REFRESH_SECRET!
 
   async registerUser(createUserDto: CreateUserDto): Promise<IUser> {
-    const { email, password, username } = createUserDto
+    const { email, password } = createUserDto
     const hashedPassword = await bcrypt.hash(password, 10)
 
     const newUser = new UserModel({
       email,
-      username,
       password: hashedPassword
     })
 
@@ -104,6 +108,91 @@ class AuthService {
 
     return { accessToken: newAccessToken, refreshToken: newRefreshToken }
   }
+
+  async getProfile(username: string): Promise<User | null> {
+    try {
+      const resp = await SingerModel.findOne({ username }).exec();
+      return resp ? resp.toObject() : null; 
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      return null; 
+    }
+  }
+
+  async updateSinger(username: string, updateFields: UpdateUserDto): Promise<boolean> {
+    try {
+      const updateResult = await SingerModel.updateOne({ username }, { ...updateFields }).exec();
+      if (updateResult.modifiedCount <= 1){
+      return true }
+      else{
+        return false
+      }
+    } catch (err) {
+      console.error('Error updating user profile:', err);
+      return false;
+    }
+  }
+  
+  async like(userId: string, songId: string): Promise<IFavorites | null> {
+    const existingFavorite = await FavoriteModel.findOne({ userId, songId });
+
+    if (existingFavorite) {
+        return null;
+    }
+
+    const newFav = new FavoriteModel({
+        userId,
+        songId
+    });
+
+    await newFav.save();
+
+    return newFav;
+}
+
+  async searchArtist(query: string, page:number, limit: number): Promise<ISinger[]> {
+    try {
+      const skip = (page - 1) * limit;
+
+        const filter: any = {
+            $or: [
+                { username: { $regex: new RegExp(query, 'i') } },
+                { bio: { $regex: new RegExp(query, 'i') } }   
+        ]};
+
+        const artists = await SingerModel
+        .find(filter)
+        .skip(skip)
+        .limit(limit)
+        .exec();
+
+        return artists;
+    } catch (error) {
+        throw error; 
+    }
+  }
+
+  async unlike(userId: string, songId: string): Promise<IFavorites | null> {
+    const removedFav = await FavoriteModel.findOneAndDelete({
+        userId,
+        songId
+    });
+
+    return removedFav;
+}
+
+  async liked(userId: string,page:number,limit:number):Promise<IFavorites[]>{
+    const skip = (page - 1) * limit;
+
+    const likes = await FavoriteModel.find({ userId })
+        .skip(skip)
+        .limit(limit)
+        .exec();
+
+    return likes;
+  }
+
+
 }
 
 export default AuthService
